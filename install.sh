@@ -9,7 +9,7 @@ set -euo pipefail
 VERSION="1.0.0"
 INSTALL_BIN="/usr/local/bin/do-export"
 SERVICE_FILE="/etc/systemd/system/do-export-safe.service"
-SCRIPT_URL="https://raw.githubusercontent.com/P4jMepR/DOExport/refs/heads/main/install.sh"   # ← change this
+SCRIPT_URL="https://your-host/do-export.sh"   # ← point this at do-export.sh, NOT install.sh
 
 # ── Colors ────────────────────────────────────
 BOLD='\033[1m'
@@ -67,7 +67,6 @@ preflight() {
 
 # ── Welcome ───────────────────────────────────
 welcome() {
-  clear
   echo
   echo -e "${BOLD}  do-export${RESET} ${DIM}v${VERSION}${RESET}"
   echo -e "  ${DIM}Disk imaging & export tool — installer${RESET}"
@@ -206,7 +205,7 @@ WantedBy=multi-user.target
 EOF
 
   systemctl daemon-reload
-  systemctl enable do-export-safe.service
+  systemctl enable do-export-safe.service 2>/dev/null
   success "Service installed and enabled"
 }
 
