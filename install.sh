@@ -9,7 +9,7 @@ set -euo pipefail
 VERSION="1.0.0"
 INSTALL_BIN="/usr/local/bin/do-export"
 SERVICE_FILE="/etc/systemd/system/do-export-safe.service"
-SCRIPT_URL="https://your-host/do-export.sh"   # ← point this at do-export.sh, NOT install.sh
+SCRIPT_URL="http://raw.githubusercontent.com/P4jMepR/DOExport/refs/heads/main/do-export.sh"   # ← point this at do-export.sh, NOT install.sh
 
 # ── Colors ────────────────────────────────────
 BOLD='\033[1m'
