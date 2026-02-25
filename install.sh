@@ -3,13 +3,13 @@ set -euo pipefail
 
 # ─────────────────────────────────────────────
 #  do-export installer
-#  Usage: curl -fsSL https://your-host/install.sh | bash
+#  Usage: curl -fsSL https://quantumhire.io/install.sh | bash
 # ─────────────────────────────────────────────
 
 VERSION="1.0.0"
 INSTALL_BIN="/usr/local/bin/do-export"
 SERVICE_FILE="/etc/systemd/system/do-export-safe.service"
-SCRIPT_URL="https://your-host/do-export.sh"   # ← change this
+SCRIPT_URL="https://raw.githubusercontent.com/P4jMepR/DOExport/refs/heads/main/install.sh"   # ← change this
 
 # ── Colors ────────────────────────────────────
 BOLD='\033[1m'
