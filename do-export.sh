@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="2.1.0"
+VERSION="2.2.0"
 
 # ─────────────────────────────────────────────
 #  do-export — disk imaging script
@@ -78,6 +78,21 @@ detect_device() {
   log "Detected: $DEVICE"
 }
 
+# ── Detect partition to image ─────────────────
+# e2image works on partitions, not whole disks.
+# Find the first ext2/3/4 partition on the device,
+# fall back to the device itself for dd.
+detect_partition() {
+  PARTITION=$(lsblk -nlo NAME,FSTYPE "$DEVICE" \
+    | awk '$2 ~ /^ext[234]$/ {print "/dev/"$1; exit}')
+  if [[ -n "$PARTITION" ]]; then
+    log "Found ext partition: $PARTITION"
+  else
+    warn "No ext2/3/4 partition found on $DEVICE — will use dd"
+    PARTITION="$DEVICE"
+  fi
+}
+
 # ── Prepare output dir ────────────────────────
 prepare() {
   mkdir -p "$OUTPUT_DIR"
@@ -85,8 +100,19 @@ prepare() {
   local dev_bytes free_bytes
   dev_bytes=$(blockdev --getsize64 "$DEVICE" 2>/dev/null || echo 0)
   free_bytes=$(df --output=avail -B1 "$OUTPUT_DIR" | tail -1)
-  if (( dev_bytes > 0 && free_bytes < dev_bytes / 2 )); then
-    warn "Low disk space: device is $(( dev_bytes / 1073741824 ))G, output dir has $(( free_bytes / 1073741824 ))G free"
+
+  # Warn if output dir is on the same device being imaged
+  local out_dev img_dev
+  out_dev=$(df --output=source "$OUTPUT_DIR" | tail -1)
+  img_dev=$(lsblk -ndo PKNAME "$DEVICE" 2>/dev/null || basename "$DEVICE")
+  if [[ "$out_dev" == *"$img_dev"* ]]; then
+    warn "Output directory is on the same disk being imaged!"
+    warn "Using e2image (used-blocks only) — this is safe, but consider a remote target."
+  fi
+
+  if (( dev_bytes > 0 && free_bytes < dev_bytes / 4 )); then
+    warn "Low disk space: device is $(( dev_bytes / 1073741824 ))G, \
+output dir has $(( free_bytes / 1073741824 ))G free"
   fi
 }
 
@@ -130,17 +156,58 @@ thaw_fs() {
 trap 'thaw_fs' EXIT
 
 # ── Imaging ───────────────────────────────────
+is_ext_partition() {
+  local fstype
+  fstype=$(blkid -o value -s TYPE "$PARTITION" 2>/dev/null || true)
+  [[ "$fstype" =~ ^ext[234]$ ]]
+}
+
 create_image() {
+  # Skip compression here if converting later — avoid compress→decompress waste
   local do_compress="$COMPRESS"
   [[ "$FORMAT" != "raw" ]] && do_compress="no"
 
+  if is_ext_partition; then
+    log "Using e2image (used blocks only) on $PARTITION..."
+    create_image_e2image "$do_compress"
+  else
+    warn "Non-ext filesystem — falling back to dd (full disk copy)"
+    create_image_dd "$do_compress"
+  fi
+}
+
+create_image_e2image() {
+  local do_compress="$1"
+  require_cmd e2image
+
   if [[ "$do_compress" == "yes" ]]; then
-    log "Imaging $DEVICE → compressed raw..."
-    dd if="$DEVICE" bs=4M status=progress 2>&1 | gzip -1 > "$OUTPUT_DIR/$COMPRESSED_NAME"
+    log "Streaming $PARTITION → compressed image..."
+    # e2image supports stdout via '-' — pipe straight into gzip, no temp file
+    e2image -rap "$PARTITION" - | gzip -1 > "$OUTPUT_DIR/$COMPRESSED_NAME"
     log "Saved: $OUTPUT_DIR/$COMPRESSED_NAME ($(du -sh "$OUTPUT_DIR/$COMPRESSED_NAME" | cut -f1))"
   else
-    log "Imaging $DEVICE → raw..."
-    dd if="$DEVICE" bs=4M status=progress of="$OUTPUT_DIR/$IMAGE_NAME"
+    log "Imaging $PARTITION → sparse raw..."
+    e2image -rap "$PARTITION" "$OUTPUT_DIR/$IMAGE_NAME"
+    log "Saved: $OUTPUT_DIR/$IMAGE_NAME ($(du -sh "$OUTPUT_DIR/$IMAGE_NAME" | cut -f1))"
+
+    if [[ "$VERIFY" == "yes" ]]; then
+      log "Computing checksum..."
+      sha256sum "$OUTPUT_DIR/$IMAGE_NAME" > "$OUTPUT_DIR/$CHECKSUM_NAME"
+      log "SHA256: $(awk '{print $1}' "$OUTPUT_DIR/$CHECKSUM_NAME")"
+    fi
+  fi
+}
+
+create_image_dd() {
+  local do_compress="$1"
+
+  if [[ "$do_compress" == "yes" ]]; then
+    log "Streaming $PARTITION → compressed image (dd)..."
+    dd if="$PARTITION" bs=4M status=progress 2>&1 | gzip -1 > "$OUTPUT_DIR/$COMPRESSED_NAME"
+    log "Saved: $OUTPUT_DIR/$COMPRESSED_NAME ($(du -sh "$OUTPUT_DIR/$COMPRESSED_NAME" | cut -f1))"
+  else
+    log "Imaging $PARTITION → raw (dd)..."
+    dd if="$PARTITION" bs=4M status=progress of="$OUTPUT_DIR/$IMAGE_NAME"
     log "Saved: $OUTPUT_DIR/$IMAGE_NAME ($(du -sh "$OUTPUT_DIR/$IMAGE_NAME" | cut -f1))"
 
     if [[ "$VERIFY" == "yes" ]]; then
@@ -239,13 +306,13 @@ summary() {
 # ── Main ──────────────────────────────────────
 main() {
   require_root
-  require_cmd dd
   require_cmd lsblk
   require_cmd gzip
 
   validate_format
   validate_remote
   detect_device
+  detect_partition
   prepare
   freeze_fs
   create_image
