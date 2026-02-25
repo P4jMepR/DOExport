@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ─────────────────────────────────────────────
 #  do-export installer
-#  Usage: curl -fsSL https://quantumhire.io/install.sh | bash
+#  Usage: curl -fsSL https://your-host/install.sh | bash
 # ─────────────────────────────────────────────
 
 VERSION="1.0.0"
@@ -28,15 +28,17 @@ fail()    { echo -e "\n  ${RED}✗ $1${RESET}\n" >&2; exit 1; }
 
 ask() {
   # ask "Question" default_value
+  # Prints prompt to /dev/tty and reads from /dev/tty so it works with curl|bash
   local prompt="$1"
   local default="${2:-}"
   local answer
   if [[ -n "$default" ]]; then
-    echo -en "  ${BOLD}${prompt}${RESET} ${DIM}[${default}]${RESET}: "
+    echo -en "  ${BOLD}${prompt}${RESET} ${DIM}[${default}]${RESET}: " >/dev/tty
   else
-    echo -en "  ${BOLD}${prompt}${RESET}: "
+    echo -en "  ${BOLD}${prompt}${RESET}: " >/dev/tty
   fi
-  read -r answer
+  read -r answer </dev/tty
+  # Echo the result to stdout so $() capture works correctly
   echo "${answer:-$default}"
 }
 
@@ -46,8 +48,9 @@ ask_yn() {
   local default="${2:-y}"
   local hint
   [[ "$default" == "y" ]] && hint="Y/n" || hint="y/N"
-  echo -en "  ${BOLD}${prompt}${RESET} ${DIM}[${hint}]${RESET}: "
-  local answer; read -r answer
+  echo -en "  ${BOLD}${prompt}${RESET} ${DIM}[${hint}]${RESET}: " >/dev/tty
+  local answer
+  read -r answer </dev/tty
   answer="${answer:-$default}"
   [[ "$answer" =~ ^[Yy] ]]
 }
@@ -98,12 +101,12 @@ collect_config() {
   fi
 
   # Format
-  echo
-  echo -e "  ${BOLD}Output format${RESET}"
-  echo -e "  ${DIM}1)${RESET} raw   — universal, largest"
-  echo -e "  ${DIM}2)${RESET} qcow2 — QEMU/KVM, supports compression"
-  echo -e "  ${DIM}3)${RESET} vmdk  — VMware compatible"
-  echo -e "  ${DIM}4)${RESET} vhd   — Hyper-V / Azure compatible"
+  echo >/dev/tty
+  echo -e "  ${BOLD}Output format${RESET}"          >/dev/tty
+  echo -e "  ${DIM}1)${RESET} raw   — universal, largest"              >/dev/tty
+  echo -e "  ${DIM}2)${RESET} qcow2 — QEMU/KVM, supports compression"  >/dev/tty
+  echo -e "  ${DIM}3)${RESET} vmdk  — VMware compatible"               >/dev/tty
+  echo -e "  ${DIM}4)${RESET} vhd   — Hyper-V / Azure compatible"      >/dev/tty
   local fmt_choice
   fmt_choice=$(ask "Choose format" "1")
   case "$fmt_choice" in
