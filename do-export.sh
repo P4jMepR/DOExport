@@ -183,11 +183,11 @@ create_image_e2image() {
   if [[ "$do_compress" == "yes" ]]; then
     log "Streaming $PARTITION → compressed image..."
     # e2image supports stdout via '-' — pipe straight into gzip, no temp file
-    e2image -rap "$PARTITION" - | gzip -1 > "$OUTPUT_DIR/$COMPRESSED_NAME"
+    e2image -rapf "$PARTITION" - | gzip -1 > "$OUTPUT_DIR/$COMPRESSED_NAME"
     log "Saved: $OUTPUT_DIR/$COMPRESSED_NAME ($(du -sh "$OUTPUT_DIR/$COMPRESSED_NAME" | cut -f1))"
   else
     log "Imaging $PARTITION → sparse raw..."
-    e2image -rap "$PARTITION" "$OUTPUT_DIR/$IMAGE_NAME"
+    e2image -rapf "$PARTITION" "$OUTPUT_DIR/$IMAGE_NAME"
     log "Saved: $OUTPUT_DIR/$IMAGE_NAME ($(du -sh "$OUTPUT_DIR/$IMAGE_NAME" | cut -f1))"
 
     if [[ "$VERIFY" == "yes" ]]; then
